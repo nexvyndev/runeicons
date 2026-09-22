@@ -683,6 +683,7 @@ async function fetchSvgInnerContent(url: string): Promise<{ content: string; vie
 }
 
 const svgFetchCache = new Map<string, { content: string; viewBox: string }>();
+const svgFetchInFlight = new Map<string, Promise<{ content: string; viewBox: string }>>();
 
 export async function fetchSvgInnerContentRaw(
   url: string,
@@ -690,32 +691,44 @@ export async function fetchSvgInnerContentRaw(
   const cached = svgFetchCache.get(url);
   if (cached) return cached;
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`SVG fetch failed: ${res.status}`);
-  const text = await res.text();
+  const inFlight = svgFetchInFlight.get(url);
+  if (inFlight) return inFlight;
 
-  const svgMatch = text.match(/<svg([^>]*)>([\s\S]*?)<\/svg>/i);
-  if (!svgMatch) throw new Error("Could not parse SVG content");
+  const pending = (async () => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`SVG fetch failed: ${res.status}`);
+    const text = await res.text();
 
-  const attrs = svgMatch[1];
-  const content = svgMatch[2].trim();
+    const svgMatch = text.match(/<svg([^>]*)>([\s\S]*?)<\/svg>/i);
+    if (!svgMatch) throw new Error("Could not parse SVG content");
 
-  const viewBoxMatch = attrs.match(/viewBox=["']([^"']+)["']/i);
-  let viewBox = viewBoxMatch ? viewBoxMatch[1] : "";
+    const attrs = svgMatch[1];
+    const content = svgMatch[2].trim();
 
-  if (!viewBox) {
-    const widthMatch = attrs.match(/width=["']([^"']+)["']/i);
-    const heightMatch = attrs.match(/height=["']([^"']+)["']/i);
-    if (widthMatch && heightMatch) {
-      viewBox = `0 0 ${widthMatch[1]} ${heightMatch[1]}`;
-    } else {
-      viewBox = "0 0 24 24";
+    const viewBoxMatch = attrs.match(/viewBox=["']([^"']+)["']/i);
+    let viewBox = viewBoxMatch ? viewBoxMatch[1] : "";
+
+    if (!viewBox) {
+      const widthMatch = attrs.match(/width=["']([^"']+)["']/i);
+      const heightMatch = attrs.match(/height=["']([^"']+)["']/i);
+      if (widthMatch && heightMatch) {
+        viewBox = `0 0 ${widthMatch[1]} ${heightMatch[1]}`;
+      } else {
+        viewBox = "0 0 24 24";
+      }
     }
-  }
 
-  const result = { content, viewBox };
-  svgFetchCache.set(url, result);
-  return result;
+    const result = { content, viewBox };
+    svgFetchCache.set(url, result);
+    return result;
+  })();
+
+  svgFetchInFlight.set(url, pending);
+  try {
+    return await pending;
+  } finally {
+    svgFetchInFlight.delete(url);
+  }
 }
 
 export async function generatePng(

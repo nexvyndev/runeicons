@@ -13,6 +13,7 @@ import {
   useEditorSelectionStore,
   selectAssetInStore,
 } from "@/stores/editor-selection";
+import { useEditorScratchAssetsStore } from "@/stores/editor-scratch-assets";
 import {
   EDITOR_SUPPORTED_TYPES,
   editorAssetIdToManifest,
@@ -40,18 +41,43 @@ export function EditorShell({ assets }: EditorShellProps) {
   const editorIconType = resolveEditorIconType(state.iconType);
 
   const hasInitRef = useRef(false);
+  const selectionHasHydrated = useEditorSelectionStore((s) => s.hasHydrated);
   useEffect(() => {
-    if (hasInitRef.current) return;
+    if (hasInitRef.current || !selectionHasHydrated) return;
     hasInitRef.current = true;
     const initialAssets = assets.filter(
       (asset) => asset.variant === editorIconType,
     );
     const seedAssets = initialAssets.length > 0 ? initialAssets : assets;
+    const { selectedAssetId, trayAssetIds } =
+      useEditorSelectionStore.getState();
+    const knownIds = new Set([
+      ...assets.map((asset) => asset.id),
+      ...useEditorScratchAssetsStore.getState().scratchAssets.map(
+        (asset) => asset.id,
+      ),
+    ]);
+    const restoredTray = trayAssetIds.filter((id) => knownIds.has(id));
+    const fallbackSelection = seedAssets[0]?.id ?? null;
+    const restoredSelection =
+      selectedAssetId && knownIds.has(selectedAssetId)
+        ? selectedAssetId
+        : fallbackSelection;
     useEditorSelectionStore.setState({
-      selectedAssetId: seedAssets[0]?.id ?? null,
-      trayAssetIds: seedAssets.slice(0, MAX_TRAY_ITEMS).map((a) => a.id),
+      selectedAssetId: restoredSelection,
+      trayAssetIds:
+        restoredTray.length > 0
+          ? [
+              ...(restoredTray.includes(restoredSelection ?? "")
+                ? []
+                : restoredSelection
+                  ? [restoredSelection]
+                  : []),
+              ...restoredTray,
+            ].slice(0, MAX_TRAY_ITEMS)
+          : seedAssets.slice(0, MAX_TRAY_ITEMS).map((a) => a.id),
     });
-  }, [assets, editorIconType]);
+  }, [assets, editorIconType, selectionHasHydrated]);
 
   const selectedAssetId = useEditorSelectionStore((s) => s.selectedAssetId);
 

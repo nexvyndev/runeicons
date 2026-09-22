@@ -9,7 +9,12 @@ export async function GET(
   const asset = await getEditorAssetById(decodeURIComponent(id));
 
   if (!asset) {
-    return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+    return NextResponse.json({ error: "Asset not found" }, {
+      status: 404,
+      headers: {
+        "Cache-Control": "public, max-age=300, s-maxage=86400",
+      },
+    });
   }
 
   return NextResponse.json(asset, {

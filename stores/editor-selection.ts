@@ -1,17 +1,40 @@
 "use client";
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { MAX_TRAY_ITEMS } from "@/constants/workspace";
 
 interface EditorSelectionStore {
   selectedAssetId: string | null;
   trayAssetIds: string[];
+  hasHydrated: boolean;
+  setHasHydrated: (hasHydrated: boolean) => void;
 }
 
-export const useEditorSelectionStore = create<EditorSelectionStore>(() => ({
-  selectedAssetId: null,
-  trayAssetIds: [],
-}));
+export const useEditorSelectionStore = create<EditorSelectionStore>()(
+  persist(
+    (set) => ({
+      selectedAssetId: null,
+      trayAssetIds: [],
+      hasHydrated: false,
+      setHasHydrated: (hasHydrated) =>
+        set((state) =>
+          state.hasHydrated === hasHydrated ? state : { hasHydrated },
+        ),
+    }),
+    {
+      name: "runeicons-editor-selection",
+      version: 1,
+      partialize: (state) => ({
+        selectedAssetId: state.selectedAssetId,
+        trayAssetIds: state.trayAssetIds,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+    },
+  ),
+);
 
 export function selectAssetInStore(assetId: string) {
   useEditorSelectionStore.setState((state) => ({
