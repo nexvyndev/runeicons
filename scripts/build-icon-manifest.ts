@@ -198,26 +198,30 @@ type GlassEntry = {
 
 function buildNormal(): NormalEntry[] {
   const entries: NormalEntry[] = [];
-  const normalRoot = join(PUBLIC, "normal");
-  const folders = readdirSync(normalRoot, { withFileTypes: true })
+  const folders = readdirSync(join(PUBLIC, "normal"), { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
     .filter((f) => FOLDER_TO_CATEGORY[f])
     .sort();
 
   for (const folder of folders) {
-    const files = readdirSync(join(normalRoot, folder))
-      .filter((f) => f.endsWith(".svg"))
-      .sort();
+    const files = new Set<string>();
+    for (const style of NON_GLASS_TYPES) {
+      const dir = join(PUBLIC, style, folder);
+      if (!existsSync(dir)) continue;
+      for (const file of readdirSync(dir)) {
+        if (file.endsWith(".svg")) files.add(file);
+      }
+    }
 
-    for (const file of files) {
+    for (const file of [...files].sort()) {
       const basename = file.replace(/\.svg$/i, "");
       const id = `${folder}-${basename}`;
       const name = titleCaseKebab(basename);
       const tagPrefix = FOLDER_TO_TAG[folder];
       const tags = [tagPrefix, ...basename.split("-").filter(Boolean)];
       const availability = {
-        normal: true,
+        normal: existsSync(join(PUBLIC, "normal", folder, file)),
         duotone: existsSync(join(PUBLIC, "duotone", folder, file)),
         fill: existsSync(join(PUBLIC, "fill", folder, file)),
         pixelated: existsSync(join(PUBLIC, "pixelated", folder, file)),
@@ -269,7 +273,7 @@ function main() {
   const glassEntries = buildGlass();
 
   const totals = {
-    normal: normalEntries.length,
+    normal: normalEntries.filter((e) => e.availability.normal).length,
     duotone: normalEntries.filter((e) => e.availability.duotone).length,
     fill: normalEntries.filter((e) => e.availability.fill).length,
     pixelated: normalEntries.filter((e) => e.availability.pixelated).length,
